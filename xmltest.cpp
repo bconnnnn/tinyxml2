@@ -1181,6 +1181,34 @@ int main( int argc, const char ** argv )
         printer.PushText( "a]]>b", true );
         printer.CloseElement( true );
         XMLTest( "CDATA split encoding", "<r><![CDATA[a]]]]><![CDATA[>b]]></r>", printer.CStr() );
+
+        // Exercise the FILE-backed path as well as the memory printer.
+        const char* fileCases[] = { "a]]>b]]>c", "prefix]]>" };
+        const char* fileExpected[] = {
+            "<r><![CDATA[a]]]]><![CDATA[>b]]]]><![CDATA[>c]]></r>",
+            "<r><![CDATA[prefix]]]]><![CDATA[>]]></r>"
+        };
+        for ( size_t i = 0; i < sizeof(fileCases) / sizeof(fileCases[0]); ++i ) {
+            FILE* file = tmpfile();
+            XMLTest( "CDATA temporary file opens", true, file != 0 );
+            if ( !file ) {
+                continue;
+            }
+            {
+                XMLPrinter filePrinter( file, true );
+                filePrinter.OpenElement( "r" );
+                filePrinter.PushText( fileCases[i], true );
+                filePrinter.CloseElement( true );
+            }
+            XMLTest( "CDATA file flushes", true, fflush( file ) == 0 );
+            rewind( file );
+            char actual[128];
+            const size_t n = fread( actual, 1, sizeof(actual) - 1, file );
+            actual[n] = 0;
+            XMLTest( "CDATA file output", fileExpected[i], actual );
+            XMLTest( "CDATA file length", true, n == strlen( fileExpected[i] ) && !ferror( file ) );
+            XMLTest( "CDATA file closes", true, fclose( file ) == 0 );
+        }
     }
 
 	// InsertAfterChild causes crash.
